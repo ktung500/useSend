@@ -161,7 +161,8 @@ export async function sendEmail(
 
   const suppressionResults = await SuppressionService.checkMultipleEmails(
     allEmailsToCheck,
-    teamId
+    teamId,
+    { ignoreUnsubscribed: true }
   );
 
   // Filter each field separately
@@ -481,7 +482,8 @@ export async function sendBulkEmails(
 
       const suppressionResults = await SuppressionService.checkMultipleEmails(
         allEmailsToCheck,
-        content.teamId
+        content.teamId,
+        { ignoreUnsubscribed: true }
       );
 
       // Filter each field separately

@@ -10,6 +10,7 @@ import { DEFAULT_QUEUE_OPTIONS } from "../queue/queue-constants";
 import { logger } from "../logger/log";
 import { createWorkerHandler, TeamJob } from "../queue/bullmq-context";
 import { LimitService } from "./limit-service";
+import { applyEmailUnsubscribe } from "./email-unsubscribe-service";
 import {
   BUILT_IN_CONTACT_VARIABLES,
   replaceContactVariables,
@@ -405,6 +406,24 @@ async function executeEmail(job: QueueEmailJob) {
   }
 
   try {
+    // Fork: unsubscribe links for API emails (email-unsubscribe-service.ts).
+    const unsubscribe = await applyEmailUnsubscribe(email, text);
+    if (unsubscribe?.unsubscribed) {
+      await db.emailEvent.create({
+        data: {
+          emailId: email.id,
+          status: "SUPPRESSED",
+          data: { error: "Recipient unsubscribed" },
+          teamId: email.teamId,
+        },
+      });
+      await db.email.update({
+        where: { id: email.id },
+        data: { latestStatus: "SUPPRESSED" },
+      });
+      return;
+    }
+
     // Check limits right before sending (cloud-only)
     const limitCheck = await LimitService.checkEmailLimit(
       email.teamId,
@@ -440,12 +459,12 @@ async function executeEmail(job: QueueEmailJob) {
       replyTo: email.replyTo ?? undefined,
       bcc: email.bcc,
       cc: email.cc,
-      text,
-      html: email.html ?? undefined,
+      text: unsubscribe ? unsubscribe.text : text,
+      html: (unsubscribe ? unsubscribe.html : email.html) ?? undefined,
       region: domain?.region ?? env.AWS_DEFAULT_REGION,
       configurationSetName,
       attachments: attachments.length > 0 ? attachments : undefined,
-      unsubUrl,
+      unsubUrl: unsubscribe?.unsubUrl ?? unsubUrl,
       isBulk,
       inReplyToMessageId,
       emailId: email.id,

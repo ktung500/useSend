@@ -31,6 +31,7 @@ const reasonLabels = {
   HARD_BOUNCE: "Hard Bounce",
   COMPLAINT: "Complaint",
   MANUAL: "Manual",
+  UNSUBSCRIBE: "Unsubscribed",
 } as const;
 
 export default function SuppressionList() {

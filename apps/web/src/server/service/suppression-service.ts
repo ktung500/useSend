@@ -366,6 +366,7 @@ export class SuppressionService {
         HARD_BOUNCE: 0,
         COMPLAINT: 0,
         MANUAL: 0,
+        UNSUBSCRIBE: 0,
       };
 
       stats.forEach((stat) => {
@@ -394,7 +395,9 @@ export class SuppressionService {
    */
   static async checkMultipleEmails(
     emails: string[],
-    teamId: number
+    teamId: number,
+    // Fork: API sends pass true; the send worker blocks UNSUBSCRIBE only for emails with an unsubscribe link.
+    options?: { ignoreUnsubscribed?: boolean }
   ): Promise<Record<string, boolean>> {
     try {
       const normalizedEmails = emails.map((email) =>
@@ -407,6 +410,9 @@ export class SuppressionService {
           email: {
             in: normalizedEmails,
           },
+          ...(options?.ignoreUnsubscribed
+            ? { reason: { not: "UNSUBSCRIBE" as const } }
+            : {}),
         },
         select: {
           email: true,

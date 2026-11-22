@@ -353,6 +353,7 @@ enum SuppressionReason {
   HARD_BOUNCE
   COMPLAINT
   MANUAL
+  UNSUBSCRIBE // Fork: set by API email unsubscribe links; blocks only emails that carry one
 }
 
 model Contact {
