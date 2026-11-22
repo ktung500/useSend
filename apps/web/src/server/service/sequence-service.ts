@@ -1,5 +1,7 @@
 import { z } from "zod";
+import type { Contact } from "@prisma/client";
 import { db } from "../db";
+import { replaceContactVariables } from "../utils/contact-variable-replacement";
 import { logger } from "../logger/log";
 import { addOrUpdateContact } from "./contact-service";
 import { EmailQueueService } from "./email-queue-service";
@@ -50,6 +52,20 @@ export function matches(conditions: Condition[], props: Record<string, unknown>,
       case "older_than_days": return present && !Number.isNaN(days) && days > Number(c.value);
     }
   });
+}
+
+const UNSUBSCRIBE_TOKENS = new Set(["usesend_unsubscribe_url", "unsend_unsubscribe_url"]);
+
+/**
+ * Merge fields: {{firstName}}, {{lastName}}, {{email}} or any contact property, with an
+ * optional {{key, fallback=...}}. A missing value renders the fallback, else nothing.
+ * The unsubscribe placeholder is left for the send worker.
+ */
+export function fillContactFields(value: string, contact: Contact) {
+  const keys = [...value.matchAll(/\{\{\s*(?:contact\.)?([a-zA-Z0-9_]+)/g)]
+    .map((m) => m[1]!)
+    .filter((k) => !UNSUBSCRIBE_TOKENS.has(k.toLowerCase()));
+  return keys.length ? replaceContactVariables(value, contact, keys) : value;
 }
 
 export const sendAt = (startedAt: Date, steps: Steps, index: number) =>
@@ -124,9 +140,9 @@ export async function processEnrollment(id: string, now = new Date()) {
         to: [e.contact.email],
         from: seq.from,
         replyTo: seq.replyTo,
-        subject: variant.subject,
-        html: variant.html,
-        text: variant.text,
+        subject: fillContactFields(variant.subject, e.contact),
+        html: fillContactFields(variant.html, e.contact),
+        text: variant.text && fillContactFields(variant.text, e.contact),
         teamId: seq.teamId,
         domainId: domain.id,
         contactId: e.contact.id,

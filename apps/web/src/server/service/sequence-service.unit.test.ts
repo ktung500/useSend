@@ -20,7 +20,7 @@ vi.mock("~/server/service/suppression-service", () => ({ SuppressionService: moc
 vi.mock("~/server/service/contact-service", () => ({ addOrUpdateContact: vi.fn() }));
 vi.mock("~/server/logger/log", () => ({ logger: { error: vi.fn(), info: vi.fn() } }));
 
-import { dueStepIndex, matches, processEnrollment } from "~/server/service/sequence-service";
+import { dueStepIndex, fillContactFields, matches, processEnrollment } from "~/server/service/sequence-service";
 
 const DAY = 86_400_000;
 const start = new Date("2026-11-01T10:00:00Z");
@@ -107,5 +107,16 @@ describe("processEnrollment", () => {
       data: { status: "STOPPED", stopReason: "unsubscribed", nextSendAt: null },
     });
     expect(mockDb.$transaction).not.toHaveBeenCalled();
+  });
+});
+
+describe("merge fields", () => {
+  const contact = { id: "c1", email: "a@b.co", firstName: null, lastName: null, properties: { trial_end: "Dec 1" } } as never;
+
+  it("fills names and properties, uses fallbacks, and keeps the unsubscribe link", () => {
+    expect(fillContactFields("Hey {{firstName, fallback=there}},", contact)).toBe("Hey there,");
+    expect(fillContactFields("Trial ends {{trial_end}}.", contact)).toBe("Trial ends Dec 1.");
+    expect(fillContactFields("Plan: {{plan}}.", contact)).toBe("Plan: .");
+    expect(fillContactFields('<a href="{{usesend_unsubscribe_url}}">x</a>', contact)).toBe('<a href="{{usesend_unsubscribe_url}}">x</a>');
   });
 });
