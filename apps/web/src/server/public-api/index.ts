@@ -32,6 +32,7 @@ import emailTimeSeries from "./api/analytics/email-time-series";
 import reputationMetricsData from "./api/analytics/reputation-metrics-data";
 import bulkAddContactsHandle from "./api/contacts/bulk-add-contacts";
 import bulkDeleteContacts from "./api/contacts/bulk-delete-contacts";
+import sequenceRoutes from "./api/sequences/sequences";
 
 
 export const app = getApp();
@@ -80,5 +81,8 @@ deleteCampaignHandle(app);
 /**Analytics related APIs */
 emailTimeSeries(app);
 reputationMetricsData(app);
+
+/**Fork: sequence APIs */
+sequenceRoutes(app);
 
 export default app;

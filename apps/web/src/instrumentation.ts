@@ -41,6 +41,12 @@ export async function register() {
     );
     await CampaignSchedulerService.start();
 
+    // Fork: email sequences.
+    const { SequenceSchedulerService } = await import(
+      "~/server/jobs/sequence-scheduler-job"
+    );
+    await SequenceSchedulerService.start();
+
     initialized = true;
   }
 }

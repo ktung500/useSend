@@ -79,20 +79,20 @@ model VerificationToken {
 }
 
 model User {
-  id               Int        @id @default(autoincrement())
-  name             String?
-  email            String?    @unique
-  emailVerified    DateTime?
-  image            String?
-  isBetaUser       Boolean    @default(false)
-  isWaitlisted     Boolean    @default(false)
-  createdAt        DateTime   @default(now())
-  accounts         Account[]
-  sessions         Session[]
-  teamUsers        TeamUser[]
-  webhookEndpoints Webhook[]
+  id                  Int                  @id @default(autoincrement())
+  name                String?
+  email               String?              @unique
+  emailVerified       DateTime?
+  image               String?
+  isBetaUser          Boolean              @default(false)
+  isWaitlisted        Boolean              @default(false)
+  createdAt           DateTime             @default(now())
+  accounts            Account[]
+  sessions            Session[]
+  teamUsers           TeamUser[]
+  webhookEndpoints    Webhook[]
   waitlistApplication WaitlistApplication?
-  feedback         Feedback[]
+  feedback            Feedback[]
 }
 
 enum WaitlistStatus {
@@ -149,6 +149,7 @@ model Team {
   emails           Email[]
   contactBooks     ContactBook[]
   campaigns        Campaign[]
+  sequences        Sequence[]
   templates        Template[]
   dailyEmailUsages DailyEmailUsage[]
   subscription     Subscription[]
@@ -273,30 +274,33 @@ enum EmailStatus {
 }
 
 model Email {
-  id           String       @id @default(cuid())
-  sesEmailId   String?      @unique
-  from         String
-  to           String[]
-  replyTo      String[]
-  cc           String[]
-  bcc          String[]
-  subject      String
-  text         String?
-  html         String?
-  latestStatus EmailStatus  @default(QUEUED)
-  teamId       Int
-  domainId     Int?
-  apiId        Int?
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
-  scheduledAt  DateTime?
-  attachments  String?
-  campaignId   String?
-  contactId    String?
-  inReplyToId  String?
-  headers      String?
-  team         Team         @relation(fields: [teamId], references: [id], onDelete: Cascade)
-  emailEvents  EmailEvent[]
+  id                   String       @id @default(cuid())
+  sesEmailId           String?      @unique
+  from                 String
+  to                   String[]
+  replyTo              String[]
+  cc                   String[]
+  bcc                  String[]
+  subject              String
+  text                 String?
+  html                 String?
+  latestStatus         EmailStatus  @default(QUEUED)
+  teamId               Int
+  domainId             Int?
+  apiId                Int?
+  createdAt            DateTime     @default(now())
+  updatedAt            DateTime     @updatedAt
+  scheduledAt          DateTime?
+  attachments          String?
+  campaignId           String?
+  contactId            String?
+  inReplyToId          String?
+  headers              String?
+  // Fork: the sequence send this email came from (sequence send log).
+  sequenceEnrollmentId String?
+  sequenceStep         Int?
+  team                 Team         @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  emailEvents          EmailEvent[]
 
   @@index([campaignId, contactId])
   @@index([createdAt(sort: Desc)])
@@ -368,7 +372,8 @@ model Contact {
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
 
-  contactBook ContactBook @relation(fields: [contactBookId], references: [id], onDelete: Cascade)
+  contactBook         ContactBook          @relation(fields: [contactBookId], references: [id], onDelete: Cascade)
+  sequenceEnrollments SequenceEnrollment[]
 
   @@unique([contactBookId, email])
   @@index([contactBookId, id])
@@ -588,19 +593,69 @@ enum FeedbackReplyStatus {
 
 /// A reply emailed to whoever sent the feedback.
 model FeedbackReply {
-  id             String              @id @default(cuid())
-  feedbackId     String
-  message        String
+  id               String              @id @default(cuid())
+  feedbackId       String
+  message          String
   /// One per reply: sending again with the same key never sends a second email
-  idempotencyKey String              @unique
-  deliveryStatus FeedbackReplyStatus @default(SENDING)
+  idempotencyKey   String              @unique
+  deliveryStatus   FeedbackReplyStatus @default(SENDING)
   /// The send attempt holding it while SENDING: only that attempt may complete it
   attemptId        String?
   attemptStartedAt DateTime?
-  sentAt         DateTime?
-  createdAt      DateTime            @default(now())
-  updatedAt      DateTime            @updatedAt
-  feedback       Feedback            @relation(fields: [feedbackId], references: [id], onDelete: Cascade)
+  sentAt           DateTime?
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  feedback         Feedback            @relation(fields: [feedbackId], references: [id], onDelete: Cascade)
 
   @@index([feedbackId])
+}
+
+// Fork: email sequences (drips). Steps live as JSON on the sequence; one enrollment
+// row per contact tracks where they are. The sequence scheduler job sends due steps.
+model Sequence {
+  id            String   @id @default(cuid())
+  teamId        Int
+  name          String
+  contactBookId String
+  domainId      Int
+  from          String
+  replyTo       String[]
+  /// [{ day: number, variants: [{ when?: Condition[], subject, html, text? }] }]
+  steps         Json
+  /// Condition[]: an enrollment stops when the contact matches all of them
+  stopWhen      Json?
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  team        Team                 @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  enrollments SequenceEnrollment[]
+
+  @@unique([teamId, name])
+}
+
+enum SequenceEnrollmentStatus {
+  ACTIVE
+  DONE
+  STOPPED
+}
+
+model SequenceEnrollment {
+  id         String                   @id @default(cuid())
+  sequenceId String
+  contactId  String
+  startedAt  DateTime                 @default(now())
+  /// Index of the next step to send
+  step       Int                      @default(0)
+  nextSendAt DateTime?
+  status     SequenceEnrollmentStatus @default(ACTIVE)
+  stopReason String?
+  createdAt  DateTime                 @default(now())
+  updatedAt  DateTime                 @updatedAt
+
+  sequence Sequence @relation(fields: [sequenceId], references: [id], onDelete: Cascade)
+  contact  Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@unique([sequenceId, contactId])
+  @@index([status, nextSendAt])
 }
